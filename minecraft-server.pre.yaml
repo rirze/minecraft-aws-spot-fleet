@@ -1,0 +1,148 @@
+Parameters:
+  keyName:
+    Type: String
+    Description: Name of an existing EC2 KeyPair to enable SSH access to the EC2 Instances
+  AZ:
+    Type: String
+    Description: AZ to deploy in.
+  ami:
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
+
+Resources:
+  spotFleetInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    DependsOn:
+      - instanceRole
+    Properties:
+      InstanceProfileName: spotFleetInstanceProfile
+      Roles:
+        - !Ref instanceRole
+
+  launchTemplate:
+    DependsOn:
+      - ssh
+      - minecraftPorts
+      - spotFleetInstanceProfile
+    Properties:
+      LaunchTemplateName: "minecraft-server-launch-template"
+      LaunchTemplateData:
+        IamInstanceProfile:
+          Arn: !GetAtt spotFleetInstanceProfile.Arn
+        ImageId: !Ref ami
+        InstanceMarketOptions:
+          MarketType: spot
+        InstanceType: m5.large
+        KeyName: !Ref keyName
+        SecurityGroupIds:
+          - !GetAtt ssh.GroupId
+          - !GetAtt minecraftPorts.GroupId
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: Minecraft Server
+        UserData:
+          Fn::Base64:
+            Fn::Include:
+              type: string
+              location: init.sh
+    Type: AWS::EC2::LaunchTemplate
+
+  spotFleet:
+    Type: 'AWS::EC2::SpotFleet'
+    Properties:
+      SpotFleetRequestConfigData:
+        IamFleetRole: !GetAtt spotFleetRole.Arn
+        AllocationStrategy: capacityOptimized
+        TargetCapacity: 1
+        ValidFrom: '2019-11-12T22:41:53Z'
+        ValidUntil: '2020-11-12T22:41:53Z'
+        TerminateInstancesWithExpiration: true
+        LaunchSpecifications: []
+        Type: maintain
+        LaunchTemplateConfigs:
+          - LaunchTemplateSpecification:
+              LaunchTemplateId: !Ref launchTemplate
+              Version: !GetAtt launchTemplate.LatestVersionNumber
+            Overrides:
+              - InstanceType: m5n.large
+                AvailabilityZone: !Ref AZ
+              - InstanceType: m5d.large
+                AvailabilityZone: !Ref AZ
+              - InstanceType: m5dn.large
+                AvailabilityZone: !Ref AZ
+              - InstanceType: m5.large
+                AvailabilityZone: !Ref AZ
+    DependsOn:
+      - launchTemplate
+      - spotFleetRole
+
+  spotFleetRole:
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - spotfleet.amazonaws.com
+        Version: "2012-10-17"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2SpotFleetTaggingRole
+      RoleName: spotFleetRole
+    Type: AWS::IAM::Role
+
+  instanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - ec2.amazonaws.com
+        Version: "2012-10-17"
+      Description: "EC2 Instance Role for Minecraft Server"
+      Policies:
+        - PolicyName: VolumeAddressListAttach
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Action:
+                - ec2:AttachVolume
+                - ec2:DescribeVolumes
+                - ec2:DescribeAddresses
+                - ec2:AssociateAddress
+                Effect: Allow
+                Resource: '*'
+      RoleName: minecraft-instance-perms
+
+  ssh:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Security Group for SSH Ports"
+      GroupName: ssh-ports-sg
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+
+  minecraftPorts:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Security Group for Minecraft Ports"
+      GroupName: minecraft-ports-sg
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 25565
+          ToPort: 25565
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: udp
+          FromPort: 25565
+          ToPort: 25565
+          CidrIp: 0.0.0.0/0
