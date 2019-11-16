@@ -12,18 +12,12 @@ Parameters:
 Resources:
   spotFleetInstanceProfile:
     Type: AWS::IAM::InstanceProfile
-    DependsOn:
-      - instanceRole
     Properties:
       InstanceProfileName: spotFleetInstanceProfile
       Roles:
         - !Ref instanceRole
 
   launchTemplate:
-    DependsOn:
-      - ssh
-      - minecraftPorts
-      - spotFleetInstanceProfile
     Properties:
       LaunchTemplateName: "minecraft-server-launch-template"
       LaunchTemplateData:
@@ -59,7 +53,6 @@ Resources:
         ValidFrom: '2019-11-12T22:41:53Z'
         ValidUntil: '2020-11-12T22:41:53Z'
         TerminateInstancesWithExpiration: true
-        LaunchSpecifications: []
         Type: maintain
         LaunchTemplateConfigs:
           - LaunchTemplateSpecification:
@@ -74,9 +67,6 @@ Resources:
                 AvailabilityZone: !Ref AZ
               - InstanceType: m5.large
                 AvailabilityZone: !Ref AZ
-    DependsOn:
-      - launchTemplate
-      - spotFleetRole
 
   spotFleetRole:
     Properties:

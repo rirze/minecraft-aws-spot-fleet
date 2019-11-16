@@ -36,10 +36,6 @@ Resources:
       RoleName: minecraft-instance-perms
     Type: 'AWS::IAM::Role'
   launchTemplate:
-    DependsOn:
-      - ssh
-      - minecraftPorts
-      - spotFleetInstanceProfile
     Properties:
       LaunchTemplateData:
         IamInstanceProfile:
@@ -260,9 +256,6 @@ Resources:
           ToPort: 25565
     Type: 'AWS::EC2::SecurityGroup'
   spotFleet:
-    DependsOn:
-      - launchTemplate
-      - spotFleetRole
     Properties:
       SpotFleetRequestConfigData:
         AllocationStrategy: capacityOptimized
@@ -270,7 +263,6 @@ Resources:
           'Fn::GetAtt':
             - spotFleetRole
             - Arn
-        LaunchSpecifications: []
         LaunchTemplateConfigs:
           - LaunchTemplateSpecification:
               LaunchTemplateId:
@@ -299,8 +291,6 @@ Resources:
         ValidUntil: '2020-11-12T22:41:53Z'
     Type: 'AWS::EC2::SpotFleet'
   spotFleetInstanceProfile:
-    DependsOn:
-      - instanceRole
     Properties:
       InstanceProfileName: spotFleetInstanceProfile
       Roles:
